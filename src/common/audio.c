@@ -129,6 +129,10 @@ int audio_release(audio_handle_t* handle)
     if (*handle != 0)
     {
         ret = (*handle)->backend->close((*handle)->backend);
+        if ((*handle)->backend != 0 && (*handle)->backend->release != 0)
+        {
+            (*handle)->backend->release((*handle)->backend);
+        }
         free(*handle);
         *handle = 0;
     }
@@ -285,7 +289,12 @@ int audio_read(audio_handle_t handle, char* buffer, size_t size)
 int audio_map_channels(audio_handle_t handle, char* buffer, size_t size, char reverse)
 {
     int ret = 0;
-    size_t const sample_size = VBanBitResolutionSize[handle->stream.bit_fmt];
+    int sample_size = vban_get_bit_resolution_size(handle->stream.bit_fmt);
+    if (sample_size < 0)
+    {
+        logger_log(LOG_FATAL, "%s: invalid bit format %d", __func__, handle->stream.bit_fmt);
+        return -EINVAL;
+    }
     size_t stream_frame_size, map_frame_size;
     char* dest_ptr;
     char const* orig_ptr;
@@ -305,8 +314,22 @@ int audio_map_channels(audio_handle_t handle, char* buffer, size_t size, char re
         return 0;
     }
 
+    // Validate frame sizes to prevent overflow
+    if (handle->stream.nb_channels > VBAN_CHANNELS_MAX_NB || handle->map.nb_channels > VBAN_CHANNELS_MAX_NB)
+    {
+        logger_log(LOG_ERROR, "%s: channel count exceeds maximum", __func__);
+        return -EINVAL;
+    }
+    
     stream_frame_size = sample_size * handle->stream.nb_channels;
     map_frame_size = sample_size * handle->map.nb_channels;
+    
+    // Validate buffer size
+    if (stream_frame_size == 0 || size % stream_frame_size != 0)
+    {
+        logger_log(LOG_ERROR, "%s: invalid buffer size or frame size", __func__);
+        return -EINVAL;
+    }
 
     memset((reverse == 1) ? buffer : handle->buffer, 0, size);
 
@@ -316,10 +339,22 @@ int audio_map_channels(audio_handle_t handle, char* buffer, size_t size, char re
             {
                 if (chan < handle->stream.nb_channels)
                 {
-                    for (frame = 0; frame != (size / stream_frame_size); ++frame)
+                    size_t total_frames = size / stream_frame_size;
+                    for (frame = 0; frame < total_frames; ++frame)
                     {
-                        orig_ptr = ((reverse == 1) ? handle->buffer : buffer) + (frame * stream_frame_size) + chan * sample_size;
-                        dest_ptr = ((reverse == 1) ? buffer : handle->buffer) + (frame * map_frame_size) + (chan * sample_size);
+                        // Calculate pointer offsets safely
+                        size_t orig_offset = (frame * stream_frame_size) + (chan * sample_size);
+                        size_t dest_offset = (frame * map_frame_size) + (chan * sample_size);
+                        
+                        // Bounds check to prevent buffer overflow
+                        if (orig_offset + sample_size > size || dest_offset + sample_size > size)
+                        {
+                            logger_log(LOG_ERROR, "%s: buffer overflow detected", __func__);
+                            return -EINVAL;
+                        }
+                        
+                        orig_ptr = ((reverse == 1) ? handle->buffer : buffer) + orig_offset;
+                        dest_ptr = ((reverse == 1) ? buffer : handle->buffer) + dest_offset;
                         memcpy(dest_ptr, orig_ptr, sample_size);
                     }
                 }
@@ -329,10 +364,22 @@ int audio_map_channels(audio_handle_t handle, char* buffer, size_t size, char re
             {
                 if (handle->map.channels[chan] < handle->stream.nb_channels)
                 {
-                    for (frame = 0; frame != (size / stream_frame_size); ++frame)
+                    size_t total_frames = size / stream_frame_size;
+                    for (frame = 0; frame < total_frames; ++frame)
                     {
-                        orig_ptr = ((reverse == 1) ? handle->buffer : buffer) + (frame * stream_frame_size) + (handle->map.channels[chan] * sample_size);
-                        dest_ptr = ((reverse == 1) ? buffer : handle->buffer) + (frame * map_frame_size) + (chan * sample_size);
+                        // Calculate pointer offsets safely
+                        size_t orig_offset = (frame * stream_frame_size) + (handle->map.channels[chan] * sample_size);
+                        size_t dest_offset = (frame * map_frame_size) + (chan * sample_size);
+                        
+                        // Bounds check to prevent buffer overflow
+                        if (orig_offset + sample_size > size || dest_offset + sample_size > size)
+                        {
+                            logger_log(LOG_ERROR, "%s: buffer overflow detected in channel mapping", __func__);
+                            return -EINVAL;
+                        }
+                        
+                        orig_ptr = ((reverse == 1) ? handle->buffer : buffer) + orig_offset;
+                        dest_ptr = ((reverse == 1) ? buffer : handle->buffer) + dest_offset;
                         memcpy(dest_ptr, orig_ptr, sample_size);
                     }
                 }

@@ -14,6 +14,7 @@ static int pulseaudio_open(audio_backend_handle_t handle, char const* device_nam
 static int pulseaudio_close(audio_backend_handle_t handle);
 static int pulseaudio_write(audio_backend_handle_t handle, char const* data, size_t size);
 static int pulseaudio_read(audio_backend_handle_t handle, char* data, size_t size);
+static void pulseaudio_release(audio_backend_handle_t handle);
 
 static enum pa_sample_format vban_to_pulseaudio_format(enum VBanBitResolution bit_resolution)
 {
@@ -61,6 +62,7 @@ int pulseaudio_backend_init(audio_backend_handle_t* handle)
     pulseaudio_backend->parent.close              = pulseaudio_close;
     pulseaudio_backend->parent.write              = pulseaudio_write;
     pulseaudio_backend->parent.read              = pulseaudio_read;
+    pulseaudio_backend->parent.release           = pulseaudio_release;
 
     *handle = (audio_backend_handle_t)pulseaudio_backend;
 
@@ -182,5 +184,17 @@ int pulseaudio_read(audio_backend_handle_t handle, char* data, size_t size)
     }
 
     return (ret < 0) ? ret : size;
+}
+
+void pulseaudio_release(audio_backend_handle_t handle)
+{
+    struct pulseaudio_backend_t* const pulseaudio_backend = (struct pulseaudio_backend_t*)handle;
+
+    if (handle == 0)
+    {
+        return;
+    }
+
+    free(pulseaudio_backend);
 }
 

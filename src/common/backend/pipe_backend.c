@@ -27,6 +27,7 @@ static int pipe_open(audio_backend_handle_t handle, char const* output_name, enu
 static int pipe_close(audio_backend_handle_t handle);
 static int pipe_write(audio_backend_handle_t handle, char const* data, size_t size);
 static int pipe_read(audio_backend_handle_t handle, char* data, size_t size);
+static void pipe_release(audio_backend_handle_t handle);
 
 int pipe_backend_init(audio_backend_handle_t* handle)
 {
@@ -49,6 +50,7 @@ int pipe_backend_init(audio_backend_handle_t* handle)
     pipe_backend->parent.close              = pipe_close;
     pipe_backend->parent.write              = pipe_write;
     pipe_backend->parent.read               = pipe_read;
+    pipe_backend->parent.release            = pipe_release;
 
     *handle = (audio_backend_handle_t)pipe_backend;
 
@@ -56,7 +58,7 @@ int pipe_backend_init(audio_backend_handle_t* handle)
 
 }
 
-int pipe_open(audio_backend_handle_t handle, char const* output_name, enum audio_direction direction, size_t buffer_size, struct stream_config_t const* config)
+int pipe_open(audio_backend_handle_t handle, char const* output_name, enum audio_direction direction, size_t buffer_size __attribute__((unused)), struct stream_config_t const* config __attribute__((unused)))
 {
     int ret;
     struct pipe_backend_t* const pipe_backend = (struct pipe_backend_t*)handle;
@@ -104,7 +106,7 @@ int pipe_open(audio_backend_handle_t handle, char const* output_name, enum audio
     {
         logger_log(LOG_FATAL, "%s: open error", __func__); //
         perror("open");
-        return ret;
+        return -errno;
     }
 
     return 0;
@@ -170,4 +172,16 @@ int pipe_read(audio_backend_handle_t handle, char* data, size_t size)
         perror("read");
     }
     return ret;
+}
+
+void pipe_release(audio_backend_handle_t handle)
+{
+    struct pipe_backend_t* const pipe_backend = (struct pipe_backend_t*)handle;
+
+    if (handle == 0)
+    {
+        return;
+    }
+
+    free(pipe_backend);
 }

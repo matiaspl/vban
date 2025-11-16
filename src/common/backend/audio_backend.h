@@ -13,6 +13,7 @@ typedef int (*audio_backend_open_f)     (audio_backend_handle_t handle, char con
 typedef int (*audio_backend_close_f)    (audio_backend_handle_t handle);
 typedef int (*audio_backend_write_f)    (audio_backend_handle_t handle, char const* data, size_t size);
 typedef int (*audio_backend_read_f)     (audio_backend_handle_t handle, char* data, size_t size);
+typedef void (*audio_backend_release_f) (audio_backend_handle_t handle);
 
 struct audio_backend_t
 {
@@ -20,6 +21,7 @@ struct audio_backend_t
     audio_backend_close_f               close;
     audio_backend_write_f               write;
     audio_backend_read_f                read;
+    audio_backend_release_f             release;
 };
 
 enum autoconnect
@@ -30,7 +32,7 @@ enum autoconnect
 };
 
 int audio_backend_get_by_name(char const* name, audio_backend_handle_t* backend);
-char const* audio_backend_get_help();
+char const* audio_backend_get_help(void);
 
 #endif /*__AUDIO_BACKEND_H__*/
 

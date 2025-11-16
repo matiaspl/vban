@@ -109,7 +109,18 @@ int socket_release(socket_handle_t* handle)
 
 int socket_is_broadcast_address(char const* ip)
 {
-    return strncmp(ip + strlen(ip) - 3, "255", 3) == 0;
+    if (ip == 0)
+    {
+        return 0;
+    }
+    
+    size_t len = strlen(ip);
+    if (len < 3)
+    {
+        return 0;
+    }
+    
+    return strncmp(ip + len - 3, "255", 3) == 0;
 }
 
 int socket_open(socket_handle_t handle)
@@ -232,7 +243,7 @@ int socket_close(socket_handle_t handle)
 #ifndef _WIN32
     if (handle->fd != 0)
 #else // _WIN32
-    if (handle->fd == INVALID_SOCKET)
+    if (handle->fd != INVALID_SOCKET)
 #endif
     {
         ret = close(handle->fd);

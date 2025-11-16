@@ -15,6 +15,7 @@ static int alsa_open(audio_backend_handle_t handle, char const* output_name, enu
 static int alsa_close(audio_backend_handle_t handle);
 static int alsa_write(audio_backend_handle_t handle, char const* data, size_t size);
 static int alsa_read(audio_backend_handle_t handle, char* data, size_t size);
+static void alsa_release(audio_backend_handle_t handle);
 
 static snd_pcm_format_t vban_to_alsa_format(enum VBanBitResolution bit_resolution)
 {
@@ -64,6 +65,7 @@ int alsa_backend_init(audio_backend_handle_t* handle)
     alsa_backend->parent.close              = alsa_close;
     alsa_backend->parent.write              = alsa_write;
     alsa_backend->parent.read               = alsa_read;
+    alsa_backend->parent.release            = alsa_release;
 
     *handle = (audio_backend_handle_t)alsa_backend;
 
@@ -83,7 +85,18 @@ int alsa_open(audio_backend_handle_t handle, char const* output_name, enum audio
         return -EINVAL;
     }
 
-    alsa_backend->frame_size = VBanBitResolutionSize[config->bit_fmt] * config->nb_channels;
+    int bit_size = vban_get_bit_resolution_size(config->bit_fmt);
+    if (bit_size < 0)
+    {
+        logger_log(LOG_ERROR, "%s: invalid bit format %d", __func__, config->bit_fmt);
+        return -EINVAL;
+    }
+    alsa_backend->frame_size = bit_size * config->nb_channels;
+    if (alsa_backend->frame_size == 0)
+    {
+        logger_log(LOG_ERROR, "%s: invalid frame size", __func__);
+        return -EINVAL;
+    }
     frame_nb = buffer_size / alsa_backend->frame_size;
 
     ret = snd_pcm_open(&alsa_backend->alsa_handle, (output_name[0] == '\0') ? ALSA_DEVICE_NAME_DEFAULT : output_name, 
@@ -220,5 +233,17 @@ int alsa_read(audio_backend_handle_t handle, char* data, size_t size)
     }
 
     return ret * alsa_backend->frame_size;
+}
+
+void alsa_release(audio_backend_handle_t handle)
+{
+    struct alsa_backend_t* const alsa_backend = (struct alsa_backend_t*)handle;
+
+    if (handle == 0)
+    {
+        return;
+    }
+
+    free(alsa_backend);
 }
 
